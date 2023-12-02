@@ -6,6 +6,9 @@ import time
 def process_chunk(chunk):
     inicio = time.time()
 
+    # Substituindo ";" por "|" em todas as colunas do DataFrame
+    chunk = chunk.replace(";", "|", regex=True)
+
     # Operações vetorizadas para manipulação de strings
     cnae_cols = chunk['cnae_fiscal_secundaria'].str.split(',', expand=True).iloc[:, :5]
     cnae_cols.rename(columns=lambda x: f'cnae_fiscal_secundaria_{x+1}', inplace=True)
@@ -23,15 +26,18 @@ def parallel_processing(consulta, conexao, chunksize, n_cores):
 
 def main():
     conexao = sqlite3.connect('cnpj.db')
-    estados = ['AC.csv', 'AL.csv', 'AP.csv', 'AM.csv', 'BA.csv', 'CE.csv', 'DF.csv', 
-                'ES.csv', 'GO.csv', 'MA.csv', 'MT.csv', 'MS.csv', 'MG.csv', 'PA.csv', 
-                'PB.csv', 'PR.csv', 'PE.csv', 'PI.csv', 'RJ.csv', 'RN.csv', 'RS.csv', 
-                'RO.csv', 'RR.csv', 'SC.csv', 'SP.csv', 'SE.csv', 'TO.csv']
+    
+    estados = ['AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 
+               'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 
+               'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 
+               'RO', 'RR', 'SC', 'SP', 'SE', 'TO']
+    
     max_lines = 6400000  # Define o número máximo de linhas por arquivo
 
     for estado in estados:
         file_counter = 0
         offset = 0  # Inicia o offset em 0
+
         while True:
             consulta = f"""
             SELECT 
@@ -63,7 +69,8 @@ def main():
             processed_data = parallel_processing(consulta, conexao, 10000, n_cores)
 
             if processed_data.empty:
-                break  # Se não houver mais dados, encerra o loop
+                print(f"Não há mais dados para o estado {estado}. Passando para o próximo.")
+                break  # Encerra o loop se não houver mais dados
 
             file_name = f'{estado}-{file_counter}.csv'
             processed_data.to_csv(file_name, index=False, header=True)
@@ -71,6 +78,10 @@ def main():
 
             file_counter += 1
             offset += max_lines  # Aumenta o offset para a próxima iteração
+
+            if len(processed_data) < max_lines:
+                print(f"Não há dados suficientes para um novo arquivo no estado {estado}.")
+                break  # Encerra o loop se os dados do arquivo atual forem menores que o máximo
 
     conexao.close()
 
