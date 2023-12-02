@@ -23,40 +23,54 @@ def parallel_processing(consulta, conexao, chunksize, n_cores):
 
 def main():
     conexao = sqlite3.connect('cnpj.db')
-    # estados = ['AC', 'AL', 'AM', 'AP', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO']
-    estados = ['SP', 'SE', 'TO']
+    estados = ['AC.csv', 'AL.csv', 'AP.csv', 'AM.csv', 'BA.csv', 'CE.csv', 'DF.csv', 
+                'ES.csv', 'GO.csv', 'MA.csv', 'MT.csv', 'MS.csv', 'MG.csv', 'PA.csv', 
+                'PB.csv', 'PR.csv', 'PE.csv', 'PI.csv', 'RJ.csv', 'RN.csv', 'RS.csv', 
+                'RO.csv', 'RR.csv', 'SC.csv', 'SP.csv', 'SE.csv', 'TO.csv']
+    max_lines = 6400000  # Define o número máximo de linhas por arquivo
 
     for estado in estados:
-        consulta = f"""
-        SELECT 
-          e.cnpj_basico,
-          e.razao_social,
-          e.natureza_juridica,
-          e.qualificacao_responsavel,
-          e.porte_empresa,
-          e.ente_federativo_responsavel, 
-          e.capital_social,
-          es.*,
-          c.descricao AS cnae_descricao,
-          m.descricao AS nome_municipio
-        FROM 
-          empresas e
-        INNER JOIN 
-          estabelecimento es ON e.cnpj_basico = es.cnpj_basico
-        LEFT JOIN 
-          cnae c ON es.cnae_fiscal = c.codigo
-        LEFT JOIN 
-          municipio m ON es.municipio = m.codigo
-        WHERE
-          es.uf = '{estado}'"""
+        file_counter = 0
+        offset = 0  # Inicia o offset em 0
+        while True:
+            consulta = f"""
+            SELECT 
+              e.cnpj_basico,
+              e.razao_social,
+              e.natureza_juridica,
+              e.qualificacao_responsavel,
+              e.porte_empresa,
+              e.ente_federativo_responsavel, 
+              e.capital_social,
+              es.*,
+              c.descricao AS cnae_descricao,
+              m.descricao AS nome_municipio
+            FROM 
+              empresas e
+            INNER JOIN 
+              estabelecimento es ON e.cnpj_basico = es.cnpj_basico
+            LEFT JOIN 
+              cnae c ON es.cnae_fiscal = c.codigo
+            LEFT JOIN 
+              municipio m ON es.municipio = m.codigo
+            WHERE
+              es.uf = '{estado}'
+            LIMIT {max_lines} OFFSET {offset}"""
 
-        n_cores = 4  # Ajuste isso de acordo com a sua máquina
+            n_cores = 4
 
-        print(f"Iniciando processamento para o estado {estado}.")
-        processed_data = parallel_processing(consulta, conexao, 10000, n_cores)
+            print(f"Iniciando processamento para o estado {estado}, arquivo {file_counter}.")
+            processed_data = parallel_processing(consulta, conexao, 10000, n_cores)
 
-        processed_data.to_csv(f'{estado}.csv', mode='a', index=False, header=True)
-        print(f"Processamento para o estado {estado} concluído. Dados salvos em {estado}.csv")
+            if processed_data.empty:
+                break  # Se não houver mais dados, encerra o loop
+
+            file_name = f'{estado}-{file_counter}.csv'
+            processed_data.to_csv(file_name, index=False, header=True)
+            print(f"Processamento para o estado {estado}, arquivo {file_counter} concluído. Dados salvos em {file_name}")
+
+            file_counter += 1
+            offset += max_lines  # Aumenta o offset para a próxima iteração
 
     conexao.close()
 
